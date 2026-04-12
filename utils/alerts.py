@@ -36,13 +36,11 @@ NIVELES = {
 # ── Función helper: obtener umbrales activos ──────────────────
 
 def _get_umbrales() -> dict:
-    """
-    Devuelve los umbrales activos.
-    Si el usuario los personalizó desde Configuración
-    (guardados en session_state), usa esos.
-    Si no, usa los defaults del módulo.
-    """
-    return st.session_state.get("umbrales", UMBRALES_DEFAULT)
+    umbrales = st.session_state.get("umbrales", None)
+    # Si es None o no es un dict válido, usar los defaults
+    if not umbrales or not isinstance(umbrales, dict):
+        return UMBRALES_DEFAULT
+    return umbrales
 
 
 # ── Bloque 1: Alertas de Fear & Greed ────────────────────────
