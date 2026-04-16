@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import pandas as pd
 from collections import Counter
@@ -9,74 +10,61 @@ from utils.noticias import (
 from utils.coingecko import get_trending
 
 
+# ── Helper de limpieza ────────────────────────────────────────
+
+def _limpiar_texto(texto: str) -> str:
+    if not texto:
+        return ""
+    texto = re.sub(r"<[^>]+>", "", texto)
+    texto = texto.replace("&amp;",   "&")
+    texto = texto.replace("&lt;",    "<")
+    texto = texto.replace("&gt;",    ">")
+    texto = texto.replace("&quot;",  '"')
+    texto = texto.replace("&#39;",   "'")
+    texto = texto.replace("&nbsp;",  " ")
+    texto = texto.replace("&#8216;", "'")
+    texto = texto.replace("&#8217;", "'")
+    texto = texto.replace("&#8220;", '"')
+    texto = texto.replace("&#8221;", '"')
+    texto = texto.replace("&#8230;", "...")
+    texto = re.sub(r"\s+", " ", texto).strip()
+    return texto
+
+
 # ── Función de renderizado de cards ──────────────────────────
 
 def _render_noticia_card(noticia: dict) -> None:
     """
-    Renderiza una noticia individual como una card HTML.
-    Incluye titular con link, fuente, tiempo, descripción
-    y badges de monedas mencionadas.
+    Renderiza una noticia usando componentes nativos de Streamlit.
+    Evita completamente el problema de HTML en el contenido.
     """
-    titulo      = noticia.get("titulo", "Sin título")
+    titulo      = _limpiar_texto(noticia.get("titulo", "Sin título"))
     url         = noticia.get("url", "")
     fuente      = noticia.get("fuente", "—")
     hace        = noticia.get("hace", "—")
-    descripcion = noticia.get("descripcion", "")
+    descripcion = _limpiar_texto(noticia.get("descripcion", ""))
     monedas     = noticia.get("monedas", [])
 
-    # Badges de monedas
-    badges_html = ""
-    for m in monedas[:4]:
-        badges_html += (
-            f'<span style="'
-            f'background:#161B22;'
-            f'color:#F7931A;'
-            f'border:1px solid #F7931A33;'
-            f'padding:1px 7px;'
-            f'border-radius:4px;'
-            f'font-size:11px;'
-            f'font-weight:600;'
-            f'margin-right:4px;'
-            f'">{m}</span>'
-        )
+    with st.container(border=True):
+        # Titular con link
+        if url:
+            st.markdown(f"**[{titulo}]({url})**")
+        else:
+            st.markdown(f"**{titulo}**")
 
-    st.markdown(
-        f"""
-        <div style='
-            background:#161B22;
-            border:1px solid #21262D;
-            border-radius:10px;
-            padding:14px 16px;
-            margin-bottom:10px;
-        '>
-            <div style='
-                display:flex;
-                justify-content:space-between;
-                align-items:flex-start;
-                margin-bottom:6px;
-            '>
-                <a href="{url}" target="_blank" style='
-                    color:#FAFAFA;
-                    font-size:14px;
-                    font-weight:600;
-                    line-height:1.4;
-                    flex:1;
-                    margin-right:12px;
-                '>{titulo}</a>
-            </div>
-            <div style='
-                color:#8B949E;
-                font-size:12px;
-                margin-bottom:8px;
-            '>
-                📡 {fuente} &nbsp;·&nbsp; 🕐 {hace}
-            </div>
-            {f'<p style="color:#8B949E;font-size:12px;margin:0 0 8px;line-height:1.5;">{descripcion[:180]}{"..." if len(descripcion) > 180 else ""}</p>' if descripcion else ''}
-            <div>{badges_html}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        # Fuente y tiempo
+        st.caption(f"📡 {fuente}  ·  🕐 {hace}")
+
+        # Descripción
+        if descripcion:
+            desc_corta = descripcion[:180]
+            puntos     = "..." if len(descripcion) > 180 else ""
+            st.caption(f"{desc_corta}{puntos}")
+
+        # Badges de monedas como texto simple
+        if monedas:
+            badges = "  ".join([f"`{m}`" for m in monedas[:4]])
+            st.markdown(badges)
 
 
 # ── Encabezado ────────────────────────────────────────────────
@@ -220,95 +208,31 @@ with col_feed:
 
 with col_lateral:
 
-    # Trending coins
     if trending:
         st.markdown("#### 🔥 Trending")
         for coin in trending[:7]:
             rank   = coin.get("rank", "—")
             symbol = coin.get("symbol", "")
             name   = coin.get("name", "")
-            st.markdown(
-                f"""
-                <div style='
-                    display:flex;
-                    align-items:center;
-                    gap:8px;
-                    padding:6px 0;
-                    border-bottom:1px solid #21262D;
-                '>
-                    <span style='color:#8B949E;font-size:12px;
-                                 min-width:16px;'>#{rank}</span>
-                    <div>
-                        <span style='font-weight:600;
-                                     font-size:13px;'>{symbol}</span>
-                        <span style='color:#8B949E;
-                                     font-size:11px;'> {name}</span>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            st.caption(f"#{rank}  **{symbol}** {name}")
         st.markdown("<br>", unsafe_allow_html=True)
 
-    # Top fuentes
     st.markdown("#### 📡 Fuentes")
     conteo_fuentes = df_feed["fuente"].value_counts()
-
     for fuente, count in conteo_fuentes.items():
-        pct = int(count / len(df_feed) * 100)
-        st.markdown(
-            f"""
-            <div style='margin-bottom:8px;'>
-                <div style='
-                    display:flex;
-                    justify-content:space-between;
-                    font-size:12px;
-                    margin-bottom:3px;
-                '>
-                    <span>{fuente}</span>
-                    <span style='color:#8B949E;'>{count}</span>
-                </div>
-                <div style='background:#21262D;border-radius:3px;height:4px;'>
-                    <div style='
-                        background:#F7931A;
-                        width:{pct}%;
-                        height:4px;
-                        border-radius:3px;
-                    '></div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        st.caption(f"{fuente} — {count} noticias")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Monedas más mencionadas
     st.markdown("#### 🏷️ Más mencionadas")
     todas_menciones = [
         m for monedas in df_feed["monedas"]
         for m in monedas
     ]
-
     if todas_menciones:
         conteo_monedas = Counter(todas_menciones).most_common(8)
         for simbolo, count in conteo_monedas:
-            st.markdown(
-                f"""
-                <div style='
-                    display:flex;
-                    justify-content:space-between;
-                    padding:4px 0;
-                    border-bottom:1px solid #21262D;
-                    font-size:13px;
-                '>
-                    <span style='font-weight:600;
-                                 color:#F7931A;'>{simbolo}</span>
-                    <span style='color:#8B949E;'>{count} noticias</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            st.caption(f"**{simbolo}** — {count} noticias")
     else:
         st.caption("Sin datos de menciones")
 
